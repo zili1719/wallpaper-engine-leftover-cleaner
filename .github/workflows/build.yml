@@ -1,0 +1,110 @@
+name: build
+
+on:
+  push:
+    branches: [main, master]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Toolchain
+        shell: pwsh
+        run: |
+          $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
+          if (-not (Test-Path $csc)) { throw 'csc.exe missing on runner' }
+          & $csc /help 2>&1 | Select-Object -First 1
+
+      - name: Build
+        shell: pwsh
+        run: ./build.ps1
+
+      - name: Smoke test
+        shell: pwsh
+        run: |
+          $exe = Join-Path $PWD 'dist\WeCleaner.exe'
+          if (-not (Test-Path $exe)) { throw 'WeCleaner.exe was not produced' }
+          $fi = Get-Item $exe
+          if ($fi.Length -lt 50KB) { throw "suspiciously small binary: $($fi.Length) bytes" }
+          $p = Start-Process -FilePath $exe -ArgumentList 'help' -Wait -PassThru -NoNewWindow
+          if ($p.ExitCode -ne 0) { throw "help exited with $($p.ExitCode)" }
+          Write-Host "smoke test ok, $([math]::Round($fi.Length/1KB)) KB"
+
+      - name: Fixture regression
+        shell: pwsh
+        run: |
+          ./make-fixture.ps1
+          $exe = Join-Path $PWD 'dist\WeCleaner.exe'
+          $lib = Join-Path $PWD 'test-fixture'
+          $json = Join-Path $PWD 'scan.json'
+
+          # Read structured output from a file instead of relying on a WinExe's stdout.
+          & $exe scan --lib $lib --json --out $json
+          if ($LASTEXITCODE -ne 0) { throw "scan exited with $LASTEXITCODE" }
+          $scan = Get-Content $json -Raw -Encoding UTF8
+
+          foreach ($needle in @('1111111111', '2222222222', '3333333333', '4444444444', '9999999999')) {
+            if ($scan -notmatch $needle) { throw "scan output missing $needle" }
+          }
+          if ($scan -match 'notanid') { throw "scan should ignore non-numeric directories" }
+
+          foreach ($pair in @(
+              @('1111111111', 'Subscribed'),
+              @('2222222222', 'Strong'),
+              @('3333333333', 'Critical'),
+              @('4444444444', 'Medium'),
+              @('9999999999', 'DownloadFragment'))) {
+            $id = $pair[0]; $level = $pair[1]
+            $block = [regex]::Match($scan, '"id"\s*:\s*"' + $id + '"(?s).{0,400}?"level"\s*:\s*"' + $level + '"')
+            if (-not $block.Success) { throw "$id should be classified as $level" }
+          }
+
+          & $exe quarantine --id 2222222222,3333333333 -y --lib $lib
+          if (-not (Test-Path (Join-Path $lib 'steamapps\workshop\content\431960\1111111111'))) {
+            throw 'subscribed item must survive'
+          }
+          if (Test-Path (Join-Path $lib 'steamapps\workshop\content\431960\2222222222')) {
+            throw 'orphan should have been quarantined'
+          }
+
+          & $exe restore --batch latest
+          if (-not (Test-Path (Join-Path $lib 'steamapps\workshop\content\431960\2222222222\project.json'))) {
+            throw 'restore did not bring files back'
+          }
+
+          & $exe purge --batch latest -y
+          Write-Host 'fixture regression ok'
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: WeCleaner
+          path: dist/WeCleaner.exe
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: WeCleaner
+          path: release
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/WeCleaner.exe
+          generate_release_notes: true
+          fail_on_unmatched_files: true
