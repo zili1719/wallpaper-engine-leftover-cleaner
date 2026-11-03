@@ -1,0 +1,66 @@
+name: Bug report
+description: Something behaves wrong, crashes, or a wallpaper is misclassified.
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. The most useful thing you can paste is the **diagnostic block** below —
+        it tells us exactly which ACF signals and which Shell capabilities your machine has.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you expect, and what did the tool actually do?
+      placeholder: I clicked "移入隔离区" and ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics output
+      description: |
+        Run this in PowerShell from the folder containing WeCleaner.exe and paste the whole output.
+        ```powershell
+        .\WeCleaner.exe paths
+        .\WeCleaner.exe scan --json
+        ```
+      render: text
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part
+      multiple: true
+      options:
+        - Misclassification (wrong status label)
+        - Quarantine / restore / purge
+        - Scan misses a library
+        - GUI (crash, layout, preview)
+        - Tray monitoring
+        - "Open folder / reveal path"
+        - CLI
+        - Build
+
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: WeCleaner version, Windows build, Steam library layout (single or multiple drives).
+      placeholder: "v1.0.0 · Windows 10 19045 · libraries on C: and D:"
+    validations:
+      required: true
+
+  - type: textarea
+    id: crashlog
+    attributes:
+      label: crash.log (if present)
+      description: "`%LOCALAPPDATA%\\WallpaperEngineLeftoverCleaner\\crash.log`"
+      render: text
+    validations:
+      required: false
