@@ -46,11 +46,21 @@ jobs:
           $exe = Join-Path $PWD 'dist\WeCleaner.exe'
           $lib = Join-Path $PWD 'test-fixture'
           $json = Join-Path $PWD 'scan.json'
+          $content = Join-Path $lib 'steamapps\workshop\content\431960'
 
-          # Read structured output from a file instead of relying on a WinExe's stdout.
-          & $exe scan --lib $lib --json --out $json
-          if ($LASTEXITCODE -ne 0) { throw "scan exited with $LASTEXITCODE" }
+          # GUI-subsystem exe under pwsh 7 does not reliably set $LASTEXITCODE,
+          # so drive it through Start-Process and inspect ExitCode explicitly.
+          function Invoke-WeCleaner {
+            param([string]$ArgLine, [string]$Step)
+            $p = Start-Process -FilePath $exe -ArgumentList $ArgLine -Wait -PassThru -NoNewWindow
+            if ($null -eq $p.ExitCode) { throw "$Step produced no exit code" }
+            if ($p.ExitCode -ne 0) { throw "$Step exited with $($p.ExitCode)" }
+          }
+
+          Invoke-WeCleaner -ArgLine "scan --lib `"$lib`" --json --out `"$json`"" -Step 'scan'
+          if (-not (Test-Path $json)) { throw 'scan produced no json report' }
           $scan = Get-Content $json -Raw -Encoding UTF8
+          if ([string]::IsNullOrWhiteSpace($scan)) { throw 'scan report is empty' }
 
           foreach ($needle in @('1111111111', '2222222222', '3333333333', '4444444444', '9999999999')) {
             if ($scan -notmatch $needle) { throw "scan output missing $needle" }
@@ -68,20 +78,20 @@ jobs:
             if (-not $block.Success) { throw "$id should be classified as $level" }
           }
 
-          & $exe quarantine --id 2222222222,3333333333 -y --lib $lib
-          if (-not (Test-Path (Join-Path $lib 'steamapps\workshop\content\431960\1111111111'))) {
+          Invoke-WeCleaner -ArgLine "quarantine --id 2222222222,3333333333 -y --lib `"$lib`"" -Step 'quarantine'
+          if (-not (Test-Path (Join-Path $content '1111111111'))) {
             throw 'subscribed item must survive'
           }
-          if (Test-Path (Join-Path $lib 'steamapps\workshop\content\431960\2222222222')) {
+          if (Test-Path (Join-Path $content '2222222222')) {
             throw 'orphan should have been quarantined'
           }
 
-          & $exe restore --batch latest
-          if (-not (Test-Path (Join-Path $lib 'steamapps\workshop\content\431960\2222222222\project.json'))) {
+          Invoke-WeCleaner -ArgLine 'restore --batch latest' -Step 'restore'
+          if (-not (Test-Path (Join-Path $content '2222222222\project.json'))) {
             throw 'restore did not bring files back'
           }
 
-          & $exe purge --batch latest -y
+          Invoke-WeCleaner -ArgLine 'purge --batch latest -y' -Step 'purge'
           Write-Host 'fixture regression ok'
 
       - name: Upload artifact
