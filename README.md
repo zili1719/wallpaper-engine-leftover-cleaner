@@ -4,7 +4,7 @@
 **把取消订阅后 Steam 忘了释放的磁盘空间拿回来。**
 
 A small Windows utility that finds workshop wallpapers still sitting in
-`steamapps\workshop\content\431960\` after the subscription is gone, tells you *why* it thinks
+`steamapps\workshop\content\431960` after the subscription is gone, tells you *why* it thinks
 each one is orphaned, and removes them — reversibly.
 
 ![Main window](docs/screenshot-main.png)
@@ -44,7 +44,7 @@ section but not the other:
 ```
 
 Unsubscribing pulls the entry out of `WorkshopItemDetails`. The `WorkshopItemsInstalled` record and
-the `content\431960\<id>\` directory usually stay behind. Wallpaper Engine no longer lists the item,
+the `content\431960\<id>` directory usually stay behind. Wallpaper Engine no longer lists the item,
 so nothing in either UI ever tells you the files are there.
 
 Measured on a real library that had never been cleaned: **73 items / 2.55 GB, of which 14 items
@@ -68,7 +68,7 @@ Three sources are cross-checked: the ACF, the filesystem, and Wallpaper Engine's
 | **Unsubscribed** | In `Installed`, missing from `Details` | **yes** |
 | **No owner** | Directory on disk, absent from both ACF sections | **yes** |
 | **Suspicious** | Present in both sections but no `subscribedby` | **yes** |
-| **Download fragment** | Unfinished download under `workshop\downloads\431960\` | **yes** |
+| **Download fragment** | Unfinished download under `workshop\downloads\431960` | **yes** |
 | Index only | In ACF, directory already gone (takes no space) | — |
 
 **Unsubscribed** is the strongest signal: Steam has already disowned the subscription, yet both the
@@ -84,7 +84,7 @@ Judging by the ACF alone would have deleted wallpapers that were in active use.
 Deleting gigabytes on someone's behalf needs more than a confirmation dialog:
 
 1. **Quarantine first.** Files move to
-   `%LOCALAPPDATA%\WallpaperEngineLeftoverCleaner\quarantine\<batch>\` with a `manifest.json`
+   `%LOCALAPPDATA%\WallpaperEngineLeftoverCleaner\quarantine\<batch>` with a `manifest.json`
    recording the original path, size, status and reasoning.
 2. **One-command rollback.** `restore --batch latest`, or the button in the quarantine manager.
 3. **Verified cross-volume moves.** When the quarantine lives on another drive, the directory is
@@ -193,7 +193,7 @@ CI runs exactly that sequence on every push.
 
 ## Known limitations
 
-- **Wallpaper Engine has no plugin API.** Its `plugins\` folder only loads native DLLs (currently
+- **Wallpaper Engine has no plugin API.** Its `plugins` folder only loads native DLLs (currently
   just the bundled `ledextensions64.dll`), and web wallpapers run in a CEF sandbox that cannot see
   Steam's subscription index. This is therefore an external tool that *cooperates* with WE — it
   reads its config for the protected set, watches the ACF for changes, and checks whether
@@ -202,7 +202,7 @@ CI runs exactly that sequence on every push.
   to disk. For maximum caution, quit WE before cleaning.
 - **Multi-account libraries.** If another Steam account on the same machine subscribes to the same
   item, `subscribedby` carries their SteamID and the item is correctly kept.
-- **`projects\myprojects\` is never touched** — those are your own creations, not subscriptions.
+- **`projects\myprojects` is never touched** — those are your own creations, not subscriptions.
 - **The ACF is never modified.** It is read-only input; every destructive action happens at the
   filesystem level, which keeps Steam's subscription index consistent.
 - **GIF previews show as a still frame.** Previews are decoded into an independent `Bitmap` so

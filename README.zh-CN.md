@@ -33,7 +33,7 @@ Wallpaper Engine 取消订阅后，真正干活的是 Steam，而 Steam 干得�
 ```
 
 退订只把条目从 `WorkshopItemDetails` 里摘掉，`WorkshopItemsInstalled` 记录和
-`content\431960\<id>\` 目录通常原样留着。WE 界面已经不显示这个壁纸了，所以两个界面都不会
+`content\431960\<id>` 目录通常原样留着。WE 界面已经不显示这个壁纸了，所以两个界面都不会
 告诉你文件还在。
 
 在一个从未清理过的真实库上实测：**73 个壁纸 / 2.55 GB，其中 14 个、375 MB 是纯残留。**
@@ -55,7 +55,7 @@ Steam 自己跑过一轮之后，有两个目录被留下：`scene.pkg` 已经�
 | **已退订** | `Installed` 有、`Details` 无 | ✓ |
 | **无主目录** | 磁盘有目录，ACF 两个段落都没有记录 | ✓ |
 | **可疑残片** | 两个段落都有，但没有 `subscribedby` | ✓ |
-| **下载残片** | `workshop\downloads\431960\` 下的未完成分片 | ✓ |
+| **下载残片** | `workshop\downloads\431960` 下的未完成分片 | ✓ |
 | 仅索引 | ACF 有记录但磁盘无目录（不占空间，仅展示） | — |
 
 「已退订」是最强信号：Steam 已经否认了这条订阅，但安装记录和文件都还在。
@@ -69,7 +69,7 @@ Steam 自己跑过一轮之后，有两个目录被留下：`scene.pkg` 已经�
 替别人删几个 GB 的文件，光有确认框不够：
 
 1. **先隔离，不直接删。** 文件移到
-   `%LOCALAPPDATA%\WallpaperEngineLeftoverCleaner\quarantine\<批次>\`，附 `manifest.json`
+   `%LOCALAPPDATA%\WallpaperEngineLeftoverCleaner\quarantine\<批次>`，附 `manifest.json`
    记录原路径、大小、状态和判定依据。
 2. **一条命令回滚。** `restore --batch latest`，或隔离区管理界面里的按钮。
 3. **跨卷移动有校验。** 隔离区在另一个驱动器时，先复制到 `.partial` 兄弟目录，比对文件数和
@@ -173,14 +173,14 @@ CI 每次推送都会跑这一串。
 
 ## 已知限制
 
-- **Wallpaper Engine 没有插件 API。** 它的 `plugins\` 只加载原生 DLL（目前只有随包的
+- **Wallpaper Engine 没有插件 API。** 它的 `plugins` 只加载原生 DLL（目前只有随包的
   `ledextensions64.dll`），Web 壁纸跑在 CEF 沙箱里，看不到 Steam 的订阅索引。所以这是一个
   **与 WE 协作**的外部工具——读它的配置拿保护集、盯 ACF 变化、检查 `wallpaper32/64.exe`
   是否在跑——而不是被加载进 WE 的插件。
 - **WE 运行中 `config.json` 可能滞后。** 保护集是上次落盘的内容。要最保守，清理前退出 WE。
 - **多账号库。** 同一机器上另一个 Steam 账号订阅了同一项时，`subscribedby` 会带上对方
   SteamID，工具会正确保留。
-- **不碰 `projects\myprojects\`**，那是你自己的作品，不是订阅残留。
+- **不碰 `projects\myprojects`**，那是你自己的作品，不是订阅残留。
 - **不修改 `appworkshop_431960.acf`。** 它只作只读输入，破坏性操作全在文件系统层面完成，
   以保持 Steam 订阅索引的一致性。
 - **GIF 预览按首帧静态显示。** 预览图会被解码成独立 `Bitmap`，不让任何文件流保持打开；
