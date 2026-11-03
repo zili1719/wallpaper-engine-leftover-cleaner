@@ -1,186 +1,168 @@
-# Wallpaper Engine Leftover Cleaner
+# Wallpaper Engine 壁纸残留清理器
 
+**简体中文** · [English](README.en.md)
+
+**把 Steam 忘了释放的磁盘空间拿回来。**
 **Reclaim the disk space Steam forgot to free after you unsubscribed.**
-**把取消订阅后 Steam 忘了释放的磁盘空间拿回来。**
 
-A small Windows utility that finds workshop wallpapers still sitting in
-`steamapps\workshop\content\431960` after the subscription is gone, tells you *why* it thinks
-each one is orphaned, and removes them — reversibly.
-
-![Main window](docs/screenshot-main.png)
-
-<p align="center">
-  <img src="assets/icon-256.png" width="96" alt="icon">
-</p>
+![主界面](docs/screenshot-main.png)
 
 | | |
 |---|---|
-| **Platform** | Windows 10 / 11, x64 |
-| **Requires** | .NET Framework 4.8 (ships with Windows 10 1903+) — no .NET SDK, no installer |
-| **Binary** | single ~120 KB `.exe` |
-| **License** | MIT |
+| **平台** | Windows 10 / 11 x64 |
+| **依赖** | .NET Framework 4.8（Win10 1903+ 自带）—— 不需要 .NET SDK，不需要安装程序 |
+| **体积** | 单个约 120 KB 的 exe |
+| **许可** | MIT |
 
-> The UI and CLI output are currently **Simplified Chinese only**. The classification itself is
-> language-independent, and `scan --json` gives machine-readable output. PRs adding i18n are very
-> welcome. 中文说明见 [README.zh-CN.md](README.zh-CN.md).
+英文说明见 [README.en.md](README.en.md)。
 
 ---
 
-## The actual problem
+## 问题出在哪
 
-Wallpaper Engine does not delete workshop content when you unsubscribe — Steam does, and it is
-unreliable about it. Unsubscribing rewrites `appworkshop_431960.acf` and drops the item from one
-section but not the other:
+Wallpaper Engine 取消订阅后，真正干活的是 Steam，而 Steam 干得不干净。取消订阅时，它会把条目从
+`appworkshop_431960.acf` 的一个段落里删掉，但不删另一个：
 
 ```
 "AppWorkshop"
 {
-    "WorkshopItemsInstalled"     ← "what Steam thinks is on disk"
+    "WorkshopItemsInstalled"     ← Steam 认为「磁盘上装着什么」
     {  "3368529063" { "size" "113188922" ... }  }
 
-    "WorkshopItemDetails"        ← "what you are actually subscribed to"
+    "WorkshopItemDetails"        ← Steam 认为「你在订阅什么」
     {  "884307090" { "subscribedby" "358117891" ... } }
 }
 ```
 
-Unsubscribing pulls the entry out of `WorkshopItemDetails`. The `WorkshopItemsInstalled` record and
-the `content\431960\<id>` directory usually stay behind. Wallpaper Engine no longer lists the item,
-so nothing in either UI ever tells you the files are there.
+退订只把条目从 `WorkshopItemDetails` 里摘掉，`WorkshopItemsInstalled` 记录和
+`content\431960\<id>` 目录通常原样留着。WE 界面已经不显示这个壁纸了，所以两个界面都不会
+告诉你文件还在。
 
-Measured on a real library that had never been cleaned: **73 items / 2.55 GB, of which 14 items
-(375 MB) were pure leftovers.**
+在一个从未清理过的真实库上实测：**73 个壁纸 / 2.55 GB，其中 14 个、375 MB 是纯残留。**
 
-And it is not only a "Steam never cleans up" problem — Steam sometimes *does* clean up, but stops
-halfway. In that same library, after Steam ran its own pass, two directories were left behind
-containing `project.json`, `preview.*` and stray assets, with `scene.pkg` already deleted. The ACF
-knew nothing about them any more.
+而且这不止是「Steam 从不清理」——有时 Steam 会清理，但**清到一半就停了**。同一个库里，
+Steam 自己跑过一轮之后，有两个目录被留下：`scene.pkg` 已经删了，`project.json`、`preview.*`
+和零散素材还在，而 ACF 里已经完全没有它们的记录。
 
-## How it decides
+## 判定逻辑
 
-Three sources are cross-checked: the ACF, the filesystem, and Wallpaper Engine's own `config.json`.
+三方交叉比对：ACF、文件系统、Wallpaper Engine 自己的 `config.json`。
 
-| Status | Condition | Cleaned by default |
+| 状态 | 条件 | 默认勾选 |
 |---|---|---|
-| **Subscribed** | `WorkshopItemDetails` has a live `subscribedby` | no |
-| **Protected** | Referenced by the *current* WE `config.json`, or in your keep-list | no |
-| **In favorites** | Unsubscribed, but still in WE's `explore.favorites` | no |
-| **Backup hint** | Unsubscribed, only appears in `config_backups\*.json` | no |
-| **Unsubscribed** | In `Installed`, missing from `Details` | **yes** |
-| **No owner** | Directory on disk, absent from both ACF sections | **yes** |
-| **Suspicious** | Present in both sections but no `subscribedby` | **yes** |
-| **Download fragment** | Unfinished download under `workshop\downloads\431960` | **yes** |
-| Index only | In ACF, directory already gone (takes no space) | — |
+| **订阅中** | `WorkshopItemDetails` 里有有效 `subscribedby` | ✗ |
+| **保护** | 当前 WE `config.json` 仍引用，或在保留白名单里 | ✗ |
+| **收藏夹** | 已退订，但还在 WE 的 `explore.favorites` 里 | ✗ |
+| **历史引用** | 已退订，仅出现在 `config_backups\*.json` 中 | ✗ |
+| **已退订** | `Installed` 有、`Details` 无 | ✓ |
+| **无主目录** | 磁盘有目录，ACF 两个段落都没有记录 | ✓ |
+| **可疑残片** | 两个段落都有，但没有 `subscribedby` | ✓ |
+| **下载残片** | `workshop\downloads\431960` 下的未完成分片 | ✓ |
+| 仅索引 | ACF 有记录但磁盘无目录（不占空间，仅展示） | — |
 
-**Unsubscribed** is the strongest signal: Steam has already disowned the subscription, yet both the
-install record and the files remain.
+「已退订」是最强信号：Steam 已经否认了这条订阅，但安装记录和文件都还在。
 
-Cross-checking matters. In the real library above, two items (`3148204491`, 265 MB and
-`3785121691`, 25.8 MB) were also missing from `WorkshopItemDetails` — but the current WE config
-still referenced them in `wproperties`, so they are classified **Protected** and never touched.
-Judging by the ACF alone would have deleted wallpapers that were in active use.
+交叉验证很关键。上面那个真实库里，`3148204491`（265 MB）和 `3785121691`（25.8 MB）也不在
+`WorkshopItemDetails` 里，但当前 WE 配置的 `wproperties` 仍引用它们，所以被判为**保护**，
+不会动。只看 ACF 会把正在用的壁纸删掉。
 
-## Safety
+## 安全设计
 
-Deleting gigabytes on someone's behalf needs more than a confirmation dialog:
+替别人删几个 GB 的文件，光有确认框不够：
 
-1. **Quarantine first.** Files move to
-   `%LOCALAPPDATA%\WallpaperEngineLeftoverCleaner\quarantine\<batch>` with a `manifest.json`
-   recording the original path, size, status and reasoning.
-2. **One-command rollback.** `restore --batch latest`, or the button in the quarantine manager.
-3. **Verified cross-volume moves.** When the quarantine lives on another drive, the directory is
-   copied to a `.partial` sibling first, file count and total byte size are compared, and only then
-   is the source deleted. Any failure keeps the original untouched.
-4. **Keep-list.** `keep add <id>` outranks every heuristic.
-5. **Running-process check.** If `wallpaper32.exe` / `wallpaper64.exe` is alive, it warns before
-   moving files that may be memory-mapped.
-6. **Recycle bin.** Permanent deletion prefers the recycle bin and falls back to a hard delete.
+1. **先隔离，不直接删。** 文件移到
+   `%LOCALAPPDATA%\WallpaperEngineLeftoverCleaner\quarantine\<批次>`，附 `manifest.json`
+   记录原路径、大小、状态和判定依据。
+2. **一条命令回滚。** `restore --batch latest`，或隔离区管理界面里的按钮。
+3. **跨卷移动有校验。** 隔离区在另一个驱动器时，先复制到 `.partial` 兄弟目录，比对文件数和
+   总字节完全一致才替换、才删源；任何一步失败都保留原文件。
+4. **保留白名单。** `keep add <id>` 优先级高于一切启发式规则。
+5. **占用检测。** 检测到 `wallpaper32.exe` / `wallpaper64.exe` 在跑会先提醒。
+6. **回收站。** 彻底删除优先走回收站，失败才硬删。
 
-## Usage
+## 使用
 
-### GUI
+### 图形界面
 
-Double-click `WeCleaner.exe`. It scans on start; already-unsubscribed leftovers are pre-checked and
-tinted red. Pick what you want, then **move to quarantine**.
+双击 `WeCleaner.exe`。启动即扫描，已退订的残片默认勾选、标红。选好后点第二个工具栏按钮
+**移入隔离区**。
 
-The right pane shows the preview image and the full ACF signal breakdown (`Installed` / `Details` /
-`subscribedby`) for the selected item, so every decision is auditable.
+右侧面板显示预览图和该条目完整的 ACF 信号（`Installed` / `Details` / `subscribedby`），
+每一次判定都可追溯。
 
-Right-click for: add to keep-list, reveal in Explorer, open the workshop page, copy ID, copy full
-path.
+右键菜单：加入保留白名单、在资源管理器中定位、打开创意工坊页面、复制 ID、复制完整路径。
 
-**Background monitoring** minimises to the tray and watches every library's `.acf`; when it changes
-it rescans and, if the orphan count grew, shows a balloon.
+**后台监视**会最小化到托盘，盯着每个库的 `.acf`；内容一变就重扫，发现残留变多就弹气泡。
 
-### CLI
+### 命令行
 
 ```powershell
-WeCleaner.exe                        # GUI
-WeCleaner.exe scan                   # table output
+WeCleaner.exe                        # 图形界面
+WeCleaner.exe scan                   # 表格输出
 WeCleaner.exe scan --json --out r.json
 WeCleaner.exe quarantine --dry-run --all
 WeCleaner.exe quarantine --all -y
 WeCleaner.exe quarantine --id 3368529063,3576135309 -y
 WeCleaner.exe batches
 WeCleaner.exe restore --batch latest
-WeCleaner.exe purge --batch latest -y         # recycle bin first
-WeCleaner.exe purge --batch latest -y --hard  # permanent
+WeCleaner.exe purge --batch latest -y         # 优先回收站
+WeCleaner.exe purge --batch latest -y --hard  # 永久删除
 WeCleaner.exe keep add 3148204491
 WeCleaner.exe keep list
-WeCleaner.exe paths                  # detected libraries + WE configs
-WeCleaner.exe tray                   # tray only, no window
-WeCleaner.exe shellopen <path>       # diagnose the Shell/reveal path
+WeCleaner.exe paths                  # 显示探测到的库与 WE 配置
+WeCleaner.exe tray                   # 只起托盘，不进主窗口
+WeCleaner.exe shellopen <path>       # 诊断 Shell/定位链路
 ```
 
-`--lib <dir>` adds an extra Steam library root (a directory containing `steamapps`) to the scan.
+`--lib <dir>` 可把额外的 Steam 库根目录（含 `steamapps` 的那一层）纳入扫描。
 
-Exit codes: `0` ok · `1` bad arguments / target · `2` runtime failure.
+退出码：`0` 成功 · `1` 参数或目标错误 · `2` 运行时异常。
 
-### Deletion is two steps
+### 删除是两步
 
-Disk space is only reclaimed by the second step:
+磁盘空间只由第二步释放：
 
 ```powershell
-WeCleaner.exe quarantine --all -y     # moves out of workshop\content, still on disk
-WeCleaner.exe purge --batch latest -y # actually deletes
+WeCleaner.exe quarantine --all -y     # 移出 workshop\content，文件仍在磁盘上
+WeCleaner.exe purge --batch latest -y # 真正删除
 ```
 
-Step one is atomic per directory and fully reversible; step two is where the bytes come back.
+第一步按目录原子操作、完全可逆；第二步才是字节回来的时候。
 
-## Build
+## 编译
 
-No SDK, no NuGet, no MSBuild — just the C# compiler that already exists on every Windows box:
+不需要 SDK、不需要 NuGet、不需要 MSBuild —— 用每个 Windows 上都有的那个 C# 编译器：
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1
 # -> dist\WeCleaner.exe
 ```
 
-The source is intentionally **C# 5**, because `%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\csc.exe`
-only speaks C# 5. That constraint keeps the build reproducible on any Windows 10/11 machine with
-zero setup.
+源码刻意停留在 **C# 5**，因为 `%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\csc.exe` 只认
+C# 5。这个限制换来的是零配置、任何 Win10/11 上都能复现的构建。
 
 ```
 src/
-  Kv.cs           Valve KeyValues (ACF / VDF) parser
-  Json.cs         minimal JSON reader/writer (no System.Web.Extensions dependency)
-  Steam.cs        library discovery: registry + libraryfolders.vdf, multi-drive
-  Scanner.cs      orphan classification, project.json metadata, data-dir resolution
-  Quarantine.cs   move / restore / purge, with verified cross-volume copies
-  Settings.cs     persisted options
-  Native.cs       console attach, SHFileOperation, OLE, Shell reveal with tiered fallback
-  Ui.cs           main window
-  UiDialogs.cs    quarantine manager, settings, tray watcher
-  Program.cs      entry point + CLI
-  AssemblyInfo.cs version metadata
+  Kv.cs           Valve KeyValues (ACF / VDF) 解析器
+  Json.cs         极简 JSON 读写（不依赖 System.Web.Extensions）
+  Steam.cs        库定位：注册表 + libraryfolders.vdf，支持多盘
+  Scanner.cs      孤儿判定、project.json 元数据、数据目录解析
+  Quarantine.cs   隔离/恢复/删除，含跨卷复制校验
+  Settings.cs     设置持久化
+  Native.cs       控制台附加、SHFileOperation、OLE、Shell 定位分级降级
+  Ui.cs           主窗口
+  UiDialogs.cs    隔离区管理、设置、托盘监视
+  Program.cs      入口 + CLI
+  AssemblyInfo.cs 版本信息
   app.manifest    asInvoker / PerMonitorV2 / longPathAware
-tools/make-icon.py  regenerates assets/icon.ico
+tools/make-icon.py  重新生成 assets/icon.ico
 ```
 
-### Regression fixture
+### 回归夹具
 
-`make-fixture.ps1` builds a throwaway Steam library covering subscribed / unsubscribed / no-owner /
-missing-`subscribedby` / download-fragment / non-numeric directory, so the whole
-quarantine → restore → purge cycle can be exercised without touching a real installation.
+`make-fixture.ps1` 会造一个用完即弃的 Steam 库，覆盖订阅中 / 已退订 / 无主 / 缺
+`subscribedby` / 下载残片 / 非数字目录六种情况，可以完整跑
+隔离 → 恢复 → 删除，不碰真实安装。
 
 ```powershell
 .\make-fixture.ps1
@@ -189,39 +171,37 @@ quarantine → restore → purge cycle can be exercised without touching a real 
 .\dist\WeCleaner.exe restore --batch latest
 ```
 
-CI runs exactly that sequence on every push.
+CI 每次推送都会跑这一串。
 
-## Known limitations
+## 已知限制
 
-- **Wallpaper Engine has no plugin API.** Its `plugins` folder only loads native DLLs (currently
-  just the bundled `ledextensions64.dll`), and web wallpapers run in a CEF sandbox that cannot see
-  Steam's subscription index. This is therefore an external tool that *cooperates* with WE — it
-  reads its config for the protected set, watches the ACF for changes, and checks whether
-  `wallpaper32/64.exe` is running — rather than something loaded into it.
-- **A running WE may have a stale `config.json`.** The protection set is whatever was last flushed
-  to disk. For maximum caution, quit WE before cleaning.
-- **Multi-account libraries.** If another Steam account on the same machine subscribes to the same
-  item, `subscribedby` carries their SteamID and the item is correctly kept.
-- **`projects\myprojects` is never touched** — those are your own creations, not subscriptions.
-- **The ACF is never modified.** It is read-only input; every destructive action happens at the
-  filesystem level, which keeps Steam's subscription index consistent.
-- **GIF previews show as a still frame.** Previews are decoded into an independent `Bitmap` so
-  nothing keeps a file stream open; as a side effect animations do not play.
-- **Revealing a file in Explorer is tiered.** `SHOpenFolderAndSelectItems` (selects, spawns
-  nothing) → `ShellExecute("open", folder)` (reuses the running explorer, spawns nothing) →
-  `explorer.exe /select` (selects, but spawns a process — **off by default**). On machines with
-  HIPS/AV shell hooks the first two can return `E_ACCESSDENIED`; the tool then copies the path to
-  the clipboard and logs the per-tier `HRESULT` instead of failing silently.
-- **Never use `Process.Start("explorer.exe", ...)` for file reveal.** Each call spawns a new
-  explorer process; two in quick succession can fail during loader init and surface a system-level
-  `explorer.exe — 0xc0000142` dialog. With `AutoRestartShell=1` the failed shell keeps getting
-  restarted, so the dialogs cascade. That is why the third tier is opt-in.
+- **Wallpaper Engine 没有插件 API。** 它的 `plugins` 只加载原生 DLL（目前只有随包的
+  `ledextensions64.dll`），Web 壁纸跑在 CEF 沙箱里，看不到 Steam 的订阅索引。所以这是一个
+  **与 WE 协作**的外部工具——读它的配置拿保护集、盯 ACF 变化、检查 `wallpaper32/64.exe`
+  是否在跑——而不是被加载进 WE 的插件。
+- **WE 运行中 `config.json` 可能滞后。** 保护集是上次落盘的内容。要最保守，清理前退出 WE。
+- **多账号库。** 同一机器上另一个 Steam 账号订阅了同一项时，`subscribedby` 会带上对方
+  SteamID，工具会正确保留。
+- **不碰 `projects\myprojects`**，那是你自己的作品，不是订阅残留。
+- **不修改 `appworkshop_431960.acf`。** 它只作只读输入，破坏性操作全在文件系统层面完成，
+  以保持 Steam 订阅索引的一致性。
+- **GIF 预览按首帧静态显示。** 预览图会被解码成独立 `Bitmap`，不让任何文件流保持打开；
+  副作用是动画不播放。
+- **资源管理器定位是分级的。** `SHOpenFolderAndSelectItems`（选中、不建进程）→
+  `ShellExecute("open", 目录)`（复用已运行的 explorer、不建进程）→
+  `explorer.exe /select`（能选中，但新建进程，**默认关闭**）。装了 HIPS/杀软的机器上前两级
+  可能返回 `E_ACCESSDENIED`，此时工具把路径复制到剪贴板，并在日志里打印逐级 `HRESULT`，
+  而不是静默失败。
+- **不要用 `Process.Start("explorer.exe", ...)` 做文件定位。** 每次调用都会新建 explorer
+  进程；连续两次时第二个可能在 loader 阶段初始化失败，弹出系统级
+  `explorer.exe — 0xc0000142`。如果 `AutoRestartShell=1`，失败的 shell 会被反复重启，
+  弹框连绵不断。所以第三级默认关闭。
 
-## Contributing
+## 反馈
 
-Bug reports benefit enormously from the diagnostic block — see the issue template. Include the
-output of `WeCleaner.exe paths` and `WeCleaner.exe scan --json`.
+提 issue 时请附上诊断块，见模板。至少包含 `WeCleaner.exe paths` 与
+`WeCleaner.exe scan --json` 的输出。
 
-## License
+## 许可
 
-MIT — see [LICENSE](LICENSE).
+MIT — 见 [LICENSE](LICENSE)。
