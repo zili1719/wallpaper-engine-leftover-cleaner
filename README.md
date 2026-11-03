@@ -1,6 +1,7 @@
 # Wallpaper Engine Leftover Cleaner
 
 **Reclaim the disk space Steam forgot to free after you unsubscribed.**
+**把取消订阅后 Steam 忘了释放的磁盘空间拿回来。**
 
 A small Windows utility that finds workshop wallpapers still sitting in
 `steamapps\workshop\content\431960\` after the subscription is gone, tells you *why* it thinks

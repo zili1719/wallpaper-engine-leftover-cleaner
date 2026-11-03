@@ -1,6 +1,7 @@
 # Wallpaper Engine 壁纸残留清理器
 
 **把 Steam 忘了释放的磁盘空间拿回来。**
+**Reclaim the disk space Steam forgot to free after you unsubscribed.**
 
 ![主界面](docs/screenshot-main.png)
 
