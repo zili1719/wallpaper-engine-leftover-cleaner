@@ -45,4 +45,4 @@ First public release.
 - **`SplitterDistance` crash on startup** when minimum panel sizes exceeded the initial control
   size.
 
-[1.0.0]: https://github.com/YOURNAME/wallpaper-engine-leftover-cleaner/releases/tag/v1.0.0
+[1.0.0]: https://github.com/zili1719/wallpaper-engine-leftover-cleaner/releases/tag/v1.0.0
